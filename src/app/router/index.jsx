@@ -8,6 +8,7 @@ import { ProtectedRoute } from './ProtectedRoute';
 // Pages
 import Landing from '../../pages/Landing';
 import Register from '../../pages/Register';
+import Login from '../../pages/Login';
 import Dashboard from '../../pages/Dashboard';
 import EmergencyRequest from '../../pages/EmergencyRequest';
 import Notifications from '../../pages/Notifications';
@@ -26,6 +27,10 @@ export const router = createBrowserRouter([
       {
         path: 'register',
         element: <Register />,
+      },
+      {
+        path: 'login',
+        element: <Login />,
       },
       {
         path: 'request',

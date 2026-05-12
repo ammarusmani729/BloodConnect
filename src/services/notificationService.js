@@ -1,4 +1,4 @@
-export const generateWhatsAppLink = (
+const generateWhatsAppLink = (
     donor,
     request
 ) => {
@@ -14,4 +14,8 @@ Can you donate immediately?
 Reply YES if available.`;
 
     return `https://wa.me/${donor.phone}?text=${encodeURIComponent(message)}`;
+};
+
+export const notificationService = {
+  generateWhatsAppLink
 };

@@ -1,9 +1,10 @@
 import { Navigate, Outlet } from 'react-router-dom';
 
-// Dummy implementation for hackathon MVP
-// In a real app, this would use context to check if the user is authenticated
-export function ProtectedRoute({ isAuthenticated = true, redirectPath = '/register' }) {
-  if (!isAuthenticated) {
+export function ProtectedRoute({ isAuthenticated = true, redirectPath = '/login' }) {
+  const donorSession = typeof window !== 'undefined' ? localStorage.getItem('currentDonor') : null;
+  const hasAccess = isAuthenticated && Boolean(donorSession);
+
+  if (!hasAccess) {
     return <Navigate to={redirectPath} replace />;
   }
 

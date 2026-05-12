@@ -2,8 +2,7 @@ import { donorService } from "./donorService.js";
 
 export const findMatchingDonors = async (request) => {
     try {
-        const areaToSearch = request.HospitalArea || request.area;
-        const matches = await donorService.getMatchingDonors(request.bloodGroup, areaToSearch);
+        const matches = await donorService.getMatchingDonors(request.bloodGroup, request.area);
         return matches.documents;
     } catch (error) {
         console.error("Error finding matching donors:", error);

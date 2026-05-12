@@ -1,5 +1,6 @@
 // Simple connection checks for Appwrite, EmailJS and WhatsApp link generation
 // Usage: set env vars as needed, then run `node scripts/check-connections.js`
+/* global process */
 
 const env = process.env;
 
@@ -105,7 +106,7 @@ async function checkEmailJS() {
   }
 }
 
-function generateWhatsAppLink(phone, name) {
+function generateWhatsAppLink(phone) {
   if (!phone) return null;
   const message = `🚨 Emergency Blood Needed\n\nBlood Group: A+\nHospital: Test Hospital\nUrgency: High\n\nCan you donate immediately? Reply YES if available.`;
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -123,7 +124,7 @@ async function runChecks() {
   results.appwrite = await checkAppwrite();
   results.appwriteDb = await checkAppwriteDatabase();
   results.emailjs = await checkEmailJS();
-  results.whatsapp = testPhone ? generateWhatsAppLink(testPhone, testName) : null;
+  results.whatsapp = testPhone ? generateWhatsAppLink(testPhone) : null;
 
   console.log('\nSummary:');
   console.log('- Appwrite health:', results.appwrite === true ? 'OK' : results.appwrite === false ? 'FAIL' : 'SKIPPED');

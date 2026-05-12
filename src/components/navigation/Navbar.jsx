@@ -3,6 +3,8 @@ import { Droplet, Menu } from 'lucide-react';
 import { Button } from '../common/Button';
 
 export function Navbar() {
+  const hasDonorSession = typeof window !== 'undefined' && Boolean(localStorage.getItem('currentDonor'));
+
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,9 +24,12 @@ export function Navbar() {
               <Link to="/register" className="text-gray-600 hover:text-brand-red px-3 py-2 text-sm font-medium transition-colors">
                 Register as Donor
               </Link>
-              <Button variant="primary" size="sm">
+              <Link
+                to={hasDonorSession ? '/dashboard' : '/login'}
+                className="rounded-full border border-brand-red px-4 py-2 text-sm font-semibold text-brand-red transition-colors hover:bg-brand-red hover:text-white"
+              >
                 Login
-              </Button>
+              </Link>
             </div>
           </div>
           
