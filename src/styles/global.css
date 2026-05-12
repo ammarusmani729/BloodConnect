@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-red: #DC2626;
+  --color-brand-soft-red: #FEE2E2;
+  --color-brand-dark: #1F2937;
+}
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-brand-dark antialiased;
+  }
+}
