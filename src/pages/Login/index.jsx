@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Query } from 'appwrite';
-import { ArrowRight, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Mail } from 'lucide-react';
 import { donorService } from '../../services/donorService';
+import { Logo } from '../../components/common/Logo';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -56,8 +57,8 @@ export default function Login() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #FFF5F5 0%, #FFFFFF 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: "'Inter', sans-serif" }}>
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', border: '1px solid #F3F4F6', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
         <div style={{ padding: '32px 32px 24px', textAlign: 'center', background: 'linear-gradient(135deg, #DC2626 0%, #9B1C1C 100%)' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ShieldCheck size={30} color="#fff" />
+          <div style={{ margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'brightness(0) invert(1)' }}>
+            <Logo variant="compact" />
           </div>
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#fff' }}>Donor Login</h1>
           <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>Use the email you registered with to access your dashboard.</p>

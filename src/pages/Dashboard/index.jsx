@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { requestService } from '../../services/requestService';
 import { sendEmailAlert } from '../../services/emailService';
 import { notificationService } from '../../services/notificationService';
+import { normalizeBloodGroup } from '../../utils/bloodGroupNormalizer';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -29,10 +30,14 @@ export default function Dashboard() {
         // Fetch all active requests
         const allRequests = await requestService.getActiveRequests();
 
-        // Filter for matching blood type
-        const matching = allRequests.documents.filter(
-          req => req.bloodGroup === donor.bloodGroup
-        );
+        // Filter for matching blood type and matching area (support both `area` and `hospitalArea`)
+        // Normalize blood groups to handle both formats (e.g., "O+" and "O Positive")
+        const donorNormalizedBlood = normalizeBloodGroup(donor.bloodGroup);
+        const matching = allRequests.documents.filter(req => {
+          const reqArea = req.area || req.hospitalArea || '';
+          const reqNormalizedBlood = normalizeBloodGroup(req.bloodGroup);
+          return reqNormalizedBlood === donorNormalizedBlood && reqArea === donor.area;
+        });
 
         setMatchingRequests(matching);
       } catch (error) {
@@ -50,21 +55,32 @@ export default function Dashboard() {
     if (!currentDonor) return;
 
     try {
-      // Send email alert
-      await sendEmailAlert(currentDonor, request);
+      // Try to send email alert, but don't block WhatsApp if it fails
+      try {
+        await sendEmailAlert(currentDonor, request);
+        console.log('Email alert sent successfully');
+      } catch (emailError) {
+        console.warn('Email alert failed (WhatsApp will still work):', emailError?.message);
+        // Continue with WhatsApp even if email fails
+      }
       
       // Generate WhatsApp link
       const waLink = notificationService.generateWhatsAppLink(currentDonor, request);
       
-      toast.success('Alert sent! Opening WhatsApp...');
+      if (!waLink) {
+        toast.error('WhatsApp: Invalid phone number format');
+        console.warn('WhatsApp link generation failed. Phone:', currentDonor.phone);
+        return;
+      }
+      
+      toast.success('Opening WhatsApp...');
+      console.log('Opening WhatsApp link:', waLink);
       
       // Open WhatsApp link in new tab
-      if (waLink) {
-        window.open(waLink, '_blank');
-      }
+      window.open(waLink, '_blank');
     } catch (error) {
       console.error('Error sending alert:', error);
-      toast.error('Failed to send alert');
+      toast.error('Failed to send alert: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -163,7 +179,10 @@ export default function Dashboard() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', gap: 20 }}>
               {matchingRequests
-                .filter(r => !search || r.hospitalName.toLowerCase().includes(search.toLowerCase()) || r.area.toLowerCase().includes(search.toLowerCase()))
+                .filter(r => {
+                  const areaSafe = (r.area || r.hospitalArea || '').toLowerCase();
+                  return !search || r.hospitalName.toLowerCase().includes(search.toLowerCase()) || areaSafe.includes(search.toLowerCase());
+                })
                 .map(request => {
                   const badgeColor = getUrgencyBadgeColor(request.urgency);
                   return (
@@ -182,7 +201,7 @@ export default function Dashboard() {
                           {request.hospitalName}
                         </div>
                         <div style={{ fontSize: 12, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>📍</span> {request.area}
+                          <span>📍</span> {request.area || request.hospitalArea}
                         </div>
                       </div>
 
@@ -192,52 +211,30 @@ export default function Dashboard() {
                         <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{request.patientName}</div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <button 
-                          onClick={() => handleSendAlert(request)}
-                          style={{ 
-                            background: '#DC2626', 
-                            color: '#fff', 
-                            border: 'none', 
-                            borderRadius: 8, 
-                            padding: '12px', 
-                            fontSize: 13, 
-                            fontWeight: 600, 
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#B91C1C'}
-                          onMouseLeave={e => e.currentTarget.style.background = '#DC2626'}
-                        >
-                          💬 Send Alert
-                        </button>
-                        <button 
-                          style={{ 
-                            background: '#FEF2F2', 
-                            color: '#DC2626', 
-                            border: '1px solid #FCA5A5', 
-                            borderRadius: 8, 
-                            padding: '12px', 
-                            fontSize: 13, 
-                            fontWeight: 600, 
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#FECACA'}
-                          onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
-                        >
-                          ℹ️ Details
-                        </button>
-                      </div>
+                      {/* Action Button */}
+                      <button 
+                        onClick={() => handleSendAlert(request)}
+                        style={{ 
+                          width: '100%',
+                          background: '#DC2626', 
+                          color: '#fff', 
+                          border: 'none', 
+                          borderRadius: 8, 
+                          padding: '12px', 
+                          fontSize: 13, 
+                          fontWeight: 600, 
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#B91C1C'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#DC2626'}
+                      >
+                        💬 Send Alert
+                      </button>
                     </div>
                   );
                 })}

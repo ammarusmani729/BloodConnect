@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Droplet, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { Button } from '../common/Button';
+import { Logo } from '../common/Logo';
 
 export function Navbar() {
   const hasDonorSession = typeof window !== 'undefined' && Boolean(localStorage.getItem('currentDonor'));
@@ -10,9 +11,8 @@ export function Navbar() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-2">
-              <Droplet className="h-8 w-8 text-brand-red" fill="currentColor" />
-              <span className="text-xl font-bold text-gray-900 tracking-tight">BloodConnect</span>
+            <Link to="/" className="flex items-center gap-2 transition-opacity hover:opacity-80">
+              <Logo variant="compact" />
             </Link>
           </div>
           

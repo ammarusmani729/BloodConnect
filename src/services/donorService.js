@@ -1,5 +1,6 @@
 import { databases, appwriteConfig } from './appwrite/config';
 import { ID, Permission, Query, Role } from 'appwrite';
+import { normalizeBloodGroup } from '../utils/bloodGroupNormalizer';
 
 const validateConfig = () => {
   if (!appwriteConfig.databaseId || !appwriteConfig.donorsCollectionId) {
@@ -64,15 +65,30 @@ export const donorService = {
         throw new Error('Blood group and area are required');
       }
 
-      return await databases.listDocuments(
+      // Normalize the input blood group for comparison
+      const normalizedSearchBlood = normalizeBloodGroup(bloodGroup);
+
+      // Fetch all donors in the area
+      const allDonorsInArea = await databases.listDocuments(
         appwriteConfig.databaseId,
         appwriteConfig.donorsCollectionId,
         [
-          Query.equal('bloodGroup', bloodGroup),
           Query.equal('area', area),
           Query.equal('available', true)
         ]
       );
+
+      // Filter by normalized blood group in memory
+      const matchingDonors = allDonorsInArea.documents.filter(donor => {
+        const normalizedDonorBlood = normalizeBloodGroup(donor.bloodGroup);
+        return normalizedDonorBlood === normalizedSearchBlood;
+      });
+
+      // Return in same format as listDocuments
+      return {
+        ...allDonorsInArea,
+        documents: matchingDonors
+      };
     } catch (error) {
       console.error('DonorService :: getMatchingDonors :: error', error);
       throw error;

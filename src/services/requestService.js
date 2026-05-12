@@ -21,7 +21,16 @@ export const requestService = {
         appwriteConfig.databaseId,
         appwriteConfig.requestsCollectionId,
         ID.unique(),
-        { hospitalName, bloodGroup, urgency, area, patientName, status },
+        {
+          hospitalName,
+          bloodGroup,
+          urgency,
+          area,
+          // keep hospitalArea for compatibility with older documents
+          hospitalArea: area,
+          patientName,
+          status,
+        },
         [Permission.read(Role.any())]
       );
     } catch (error) {

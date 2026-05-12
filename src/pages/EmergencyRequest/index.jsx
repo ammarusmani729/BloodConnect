@@ -5,6 +5,7 @@ import { Plus, ChevronDown, MapPin, Zap, Building2, User, Clock, Info, AlertCirc
 import { requestService } from '../../services/requestService';
 import { findMatchingDonors } from '../../services/matchingService';
 import { sendEmailAlert } from '../../services/emailService';
+import { normalizeBloodGroup } from '../../utils/bloodGroupNormalizer';
 
 const BLOOD_GROUPS = [
   'O Negative (Emergency Universal)', 'O Positive', 'A Positive', 'A Negative',
@@ -52,6 +53,7 @@ export default function EmergencyRequest() {
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [matchingDonors, setMatchingDonors] = useState([]);
 
   const set = (k, v) => {
     setF(p => ({ ...p, [k]: v }));
@@ -71,16 +73,26 @@ export default function EmergencyRequest() {
     setTouched(Object.fromEntries(Object.keys(f).map(k => [k, true])));
     const errs = validate(f);
     setErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length) {
+      if (errs.area) {
+        // focus the area input so hospital users notice the required field
+        document.getElementById('er-area')?.focus();
+      }
+      return;
+    }
     
     setSubmitting(true);
     try {
-      // Create the blood request
+      // Normalize blood group for consistency across the system
+      const normalizedBloodGroup = normalizeBloodGroup(f.blood);
+      
+      // Create the blood request (store both `area` and `hospitalArea` for compatibility)
       await requestService.createRequest({
         hospitalName: f.hospital,
-        bloodGroup: f.blood,
+        bloodGroup: normalizedBloodGroup,
         urgency: f.urgency,
         area: f.area,
+        hospitalArea: f.area,
         patientName: f.patient,
         status: 'active'
       });
@@ -89,26 +101,38 @@ export default function EmergencyRequest() {
       
       // Find matching donors
       const matchingDonors = await findMatchingDonors({
-        bloodGroup: f.blood,
-        area: f.area
+        bloodGroup: normalizedBloodGroup,
+        area: f.area,
+        hospitalArea: f.area,
       });
       
-      // Send email alerts to matching donors
+      setMatchingDonors(matchingDonors);
+      
+      // Send email alerts to matching donors (if configured)
       if (matchingDonors && matchingDonors.length > 0) {
+        let emailsSent = 0;
         matchingDonors.forEach(donor => {
           sendEmailAlert(donor, {
-            bloodGroup: f.blood,
+            bloodGroup: normalizedBloodGroup,
             hospitalName: f.hospital,
             urgency: f.urgency
-          }).catch(err => console.error('Email send error:', err));
+          })
+          .then(() => {
+            emailsSent++;
+            console.log(`Email sent to ${donor.email}`);
+          })
+          .catch(err => {
+            console.warn(`Email send failed for ${donor.email}:`, err?.message);
+            // Emails are optional - matching and notifications continue even if email fails
+          });
         });
-        toast.success(`Alerts sent to ${matchingDonors.length} matching donors!`);
+        toast.success(`Found ${matchingDonors.length} matching donor(s)!`);
       } else {
         toast('No matching donors found in this area.');
       }
       
       setSuccess(true);
-      setTimeout(() => navigate('/dashboard'), 2500);
+      setTimeout(() => navigate('/dashboard'), 4000);
     } catch (error) {
       toast.error('Request failed: ' + (error.message || 'Unknown error'));
       console.error('Emergency request error:', error);
@@ -221,10 +245,12 @@ export default function EmergencyRequest() {
 
             {/* Delivery Area */}
             <div>
-              <label htmlFor="er-area" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Delivery Area / Department</label>
+              <label htmlFor="er-area" style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                Delivery Area <span style={{ color: '#DC2626' }}>*</span>
+              </label>
               <div style={{ position: 'relative' }}>
                 <MapPin size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                <input id="er-area" type="text" placeholder="ER Trauma Bay 4"
+                <input id="er-area" name="area" aria-required="true" required type="text" placeholder="e.g. Gulshan Karachi"
                   value={f.area} onChange={e => set('area', e.target.value)} onBlur={() => blur('area')}
                   style={{ ...inp(errors.area), paddingLeft: '34px' }}
                   onFocus={e => e.target.style.borderColor = '#FCA5A5'}
@@ -375,21 +401,68 @@ export default function EmergencyRequest() {
         }}>
           <div style={{
             background: '#fff', borderRadius: '20px', padding: '40px 32px',
-            maxWidth: '400px', width: '100%', textAlign: 'center',
+            maxWidth: '500px', width: '100%',
             boxShadow: '0 24px 64px rgba(0,0,0,0.2)', animation: 'slideUp .3s ease',
+            maxHeight: '80vh', overflowY: 'auto',
           }}>
             <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#9B1C1C', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', boxShadow: '0 8px 24px rgba(155,28,28,0.4)' }}>
               <CheckCircle size={36} color="#fff" />
             </div>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#111827', margin: '0 0 8px' }}>Request Broadcast!</h2>
-            <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: 1.6, marginBottom: '20px' }}>
-              Emergency request for <strong style={{ color: '#DC2626' }}>{f.blood}</strong> has been sent to the nearest dispatch center.
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#111827', margin: '0 0 8px', textAlign: 'center' }}>Request Broadcast!</h2>
+            <p style={{ color: '#6B7280', fontSize: '14px', lineHeight: 1.6, marginBottom: '20px', textAlign: 'center' }}>
+              Emergency request for <strong style={{ color: '#DC2626' }}>{f.blood}</strong> has been broadcast to matching donors.
             </p>
+
+            {/* Matching Donors List */}
+            {matchingDonors && matchingDonors.length > 0 ? (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '12px', letterSpacing: '0.5px' }}>
+                  ALERTS SENT TO {matchingDonors.length} DONOR(S)
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {matchingDonors.map((donor, idx) => (
+                    <div key={idx} style={{
+                      background: '#FEF2F2', borderRadius: '10px', padding: '14px',
+                      border: '1.5px solid #FCA5A5', display: 'flex', alignItems: 'center', gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '50%',
+                        background: '#DC2626', color: '#fff', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px',
+                        flexShrink: 0
+                      }}>
+                        {donor.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '2px' }}>
+                          {donor.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6B7280', display: 'flex', gap: '8px' }}>
+                          <span>🩸 {donor.bloodGroup}</span>
+                          <span>📍 {donor.area}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: '#FEF2F2', borderRadius: '10px', padding: '16px',
+                marginBottom: '24px', textAlign: 'center', border: '1.5px solid #FCA5A5'
+              }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#DC2626', marginBottom: '4px' }}>⚠️ No Matching Donors</div>
+                <div style={{ fontSize: '12px', color: '#6B7280' }}>
+                  No donors available in this area matching blood type {f.blood}.
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button onClick={() => navigate('/dashboard')} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#9B1C1C', color: '#fff', fontWeight: 700, fontSize: '14px', border: 'none', cursor: 'pointer' }}>
                 View Dashboard →
               </button>
-              <button onClick={() => setSuccess(false)} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#F9FAFB', color: '#374151', fontWeight: 600, fontSize: '14px', border: '1.5px solid #E5E7EB', cursor: 'pointer' }}>
+              <button onClick={() => { setSuccess(false); setMatchingDonors([]); }} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#F9FAFB', color: '#374151', fontWeight: 600, fontSize: '14px', border: '1.5px solid #E5E7EB', cursor: 'pointer' }}>
                 Submit Another
               </button>
             </div>

@@ -4,6 +4,7 @@ import {
   Brain, LayoutDashboard, TrendingUp, MapPin,
   ChevronRight
 } from 'lucide-react';
+import LogoImage from '../../assets/BloodConnectLogo.png';
 
 const stats = [
   { icon: Users, value: '25,430+', label: 'REGISTERED DONORS' },
@@ -271,10 +272,8 @@ export default function Landing() {
             {/* Brand */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Heart size={15} color="#fff" fill="#fff" />
-                </div>
-                <span style={{ color: '#fff', fontWeight: 800, fontSize: '17px' }}>BloodConnect</span>
+                <img src={LogoImage} alt="Blood Connect" style={{ height: '34px', width: 'auto' }} />
+                <span style={{ color: '#fff', fontWeight: 800, fontSize: '17px' }}>Blood Connect</span>
               </div>
               <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', lineHeight: 1.7, marginBottom: '16px' }}>
                 Connecting hospitals and donors for life-saving blood transfusions in real time.

@@ -3,17 +3,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
   User, 
-  Droplet, 
   Phone, 
   Mail, 
   MapPin, 
   Shield, 
   Heart, 
+  Droplet,
   ChevronDown, 
-  AlertCircle, 
-  HandHeart
+  AlertCircle
 } from 'lucide-react';
 import { donorService } from '../../services/donorService';
+import { normalizeBloodGroup } from '../../utils/bloodGroupNormalizer';
+import { Logo } from '../../components/common/Logo';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -61,7 +62,7 @@ export default function Register() {
     try {
       const result = await donorService.createDonor({
         name: f.name,
-        bloodGroup: f.blood,
+        bloodGroup: normalizeBloodGroup(f.blood),
         area: f.city,
         phone: f.phone,
         email: f.email,
@@ -71,7 +72,7 @@ export default function Register() {
       localStorage.setItem('currentDonor', JSON.stringify({
         id: result.$id,
         name: f.name,
-        bloodGroup: f.blood,
+        bloodGroup: normalizeBloodGroup(f.blood),
         area: f.city,
         phone: f.phone,
         email: f.email,
@@ -123,8 +124,8 @@ export default function Register() {
 
       {/* Hero Section */}
       <div className="flex flex-col items-center pt-12 pb-8 px-4 text-center">
-        <div className="w-16 h-16 bg-[#E12B2B] rounded-full flex items-center justify-center mb-6 shadow-lg shadow-red-100">
-          <HandHeart className="text-white" size={32} />
+        <div className="mb-6">
+          <Logo variant="full" />
         </div>
         <h1 className="text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">
           Become a Lifesaver
@@ -234,6 +235,7 @@ export default function Register() {
                   />
                 </div>
                 {errors.phone && <p className="text-xs text-red-500 font-medium ml-1 flex items-center gap-1"><AlertCircle size={12} /> {errors.phone}</p>}
+                <p className="text-xs text-gray-500 ml-1">Include country code (e.g., +1 for US, +92 for Pakistan)</p>
               </div>
 
               <div className="space-y-2">
