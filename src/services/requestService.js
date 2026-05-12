@@ -3,13 +3,13 @@ import { ID, Query } from 'appwrite';
 
 export const requestService = {
   // Create an emergency request
-  createRequest: async (requestData) => {
+  createRequest: async ({ hospitalName, bloodGroup, urgency, HospitalArea, patientName, status = "active" }) => {
     try {
       return await databases.createDocument(
         appwriteConfig.databaseId,
         appwriteConfig.requestsCollectionId,
         ID.unique(),
-        requestData
+        { hospitalName, bloodGroup, urgency, HospitalArea, patientName, status }
       );
     } catch (error) {
       console.error('RequestService :: createRequest :: error', error);

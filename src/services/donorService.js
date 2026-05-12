@@ -3,13 +3,13 @@ import { ID, Query } from 'appwrite';
 
 export const donorService = {
   // Create a new donor profile
-  createDonor: async (donorData) => {
+  createDonor: async ({ name, bloodGroup, area, phone, email, available = true }) => {
     try {
       return await databases.createDocument(
         appwriteConfig.databaseId,
         appwriteConfig.donorsCollectionId,
         ID.unique(),
-        donorData
+        { name, bloodGroup, area, phone, email, available }
       );
     } catch (error) {
       console.error('DonorService :: createDonor :: error', error);
@@ -31,15 +31,16 @@ export const donorService = {
     }
   },
 
-  // Get donor by blood group and location proximity
-  getMatchingDonors: async (bloodGroup, city) => {
+  // Get matching donors by blood group and area directly from the database
+  getMatchingDonors: async (bloodGroup, area) => {
     try {
       return await databases.listDocuments(
         appwriteConfig.databaseId,
         appwriteConfig.donorsCollectionId,
         [
           Query.equal('bloodGroup', bloodGroup),
-          Query.equal('city', city)
+          Query.equal('area', area),
+          Query.equal('available', true)
         ]
       );
     } catch (error) {
