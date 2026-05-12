@@ -1,20 +1,21 @@
-import donors from "../donors.js";
-import { sendEmailAlert } from "./emailService.js";
+// import { sendEmailAlert } from "./emailService.js";
 import { findMatchingDonors } from "./matchingService.js";
 import { generateWhatsAppLink } from "./notificationService.js";
 
-// Fake hospital request
+// Fake hospital request matching the new Appwrite schema
 const request = {
     bloodGroup: "A+",
-    area: "Karachi",
-    hospital: "Civil Hospital",
-    urgency: "Critical"
+    HospitalArea: "Karachi",
+    hospitalName: "Civil Hospital",
+    urgency: "Critical",
+    patientName: "John Doe",
+    status: "active"
 };
 
 console.log("\n🚨 BLOODCONNECT TEST RUN STARTED\n");
 
 // Step 1: Matching
-const matchedDonors = findMatchingDonors(request);
+const matchedDonors = await findMatchingDonors(request);
 
 console.log("✅ Matched Donors Found:");
 console.log(matchedDonors);
@@ -38,8 +39,10 @@ matchedDonors.forEach((donor) => {
     console.log(
         `Message: Dear ${donor.name}, ` +
         `an emergency blood request for ${request.bloodGroup} ` +
-        `is needed at ${request.hospital}. Urgency: ${request.urgency}`
+        `is needed at ${request.hospitalName}. Urgency: ${request.urgency}`
     );
+    // Un-comment to actually send emails via EmailJS
+    // sendEmailAlert(donor, request);
     console.log("----------------------");
 });
 

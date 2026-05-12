@@ -8,7 +8,7 @@ export const sendEmailAlert = (donor, request) => {
         to_email: donor.email,
 
         blood_group: request.bloodGroup,
-        hospital: request.hospital,
+        hospital: request.hospitalName || request.hospital,
         urgency: request.urgency
 
     };

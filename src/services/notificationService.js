@@ -7,7 +7,7 @@ export const generateWhatsAppLink = (
         `🚨 Emergency Blood Needed
 
 Blood Group: ${request.bloodGroup}
-Hospital: ${request.hospital}
+Hospital: ${request.hospitalName || request.hospital}
 Urgency: ${request.urgency}
 
 Can you donate immediately?

@@ -1,13 +1,12 @@
-import donors from "../donors.js";
+import { donorService } from "./donorService.js";
 
-export const findMatchingDonors = (request) => {
-
-    return donors.filter((donor) => {
-        return (
-            donor.bloodGroup === request.bloodGroup &&
-            donor.area === request.area &&
-            donor.available === true
-        );
-    });
-
+export const findMatchingDonors = async (request) => {
+    try {
+        const areaToSearch = request.HospitalArea || request.area;
+        const matches = await donorService.getMatchingDonors(request.bloodGroup, areaToSearch);
+        return matches.documents;
+    } catch (error) {
+        console.error("Error finding matching donors:", error);
+        return [];
+    }
 };
