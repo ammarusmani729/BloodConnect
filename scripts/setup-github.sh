@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+# Blood Connect: one-time GitHub repository setup for the repository OWNER.
+# Steps: labels, milestones, repository merge settings, security features,
+# GitHub Project (board + custom fields), and main-branch protection.
+#
+# SAFE BY DEFAULT: without --apply it only PRINTS what it would change (dry run).
+# Run --apply only after the team has approved the plan in docs/DEVOPS.md.
+#
+# Usage:  scripts/setup-github.sh [--apply] <step>...
+# Steps:  labels | milestones | repo-settings | security | project | branch-protection
+#         all  (= labels milestones repo-settings security project; NOT branch-protection)
+# Env:    REPO=owner/name (default below), REQUIRED_CHECKS="ci" (space-separated)
+# Needs:  GitHub CLI logged in as a repo admin (gh auth login);
+#         the project step also needs: gh auth refresh -s project
+set -euo pipefail
+
+REPO="${REPO:-ammarusmani729/BloodConnect}"
+OWNER="${REPO%%/*}"
+REQUIRED_CHECKS="${REQUIRED_CHECKS:-ci}"
+APPLY=false
+STEPS=()
+
+usage() { sed -n '2,15p' "$0"; }
+
+for arg in "$@"; do
+  case "$arg" in
+    --apply) APPLY=true ;;
+    -h|--help) usage; exit 0 ;;
+    all) STEPS+=(labels milestones repo-settings security project) ;;
+    labels|milestones|repo-settings|security|project|branch-protection) STEPS+=("$arg") ;;
+    *) echo "Unknown argument: $arg"; usage; exit 1 ;;
+  esac
+done
+if [ ${#STEPS[@]} -eq 0 ]; then usage; exit 1; fi
+
+# Run a command, or print it in dry-run mode.
+run() {
+  if $APPLY; then "$@"; else printf '[dry-run]'; printf ' %q' "$@"; printf '\n'; fi
+}
+
+# Run a gh command that takes a JSON body on stdin, or print both in dry-run mode.
+run_json() {
+  local json="$1"; shift
+  if $APPLY; then
+    printf '%s' "$json" | gh "$@" --input -
+  else
+    printf '[dry-run] gh'; printf ' %q' "$@"; printf ' --input - <<JSON\n%s\nJSON\n' "$json"
+  fi
+}
+
+require_gh() {
+  command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) is not installed: https://cli.github.com/"; exit 1; }
+  gh auth status >/dev/null 2>&1 || { echo "Not logged in. Run: gh auth login"; exit 1; }
+  if $APPLY; then
+    local admin
+    admin="$(gh api "repos/$REPO" --jq '.permissions.admin')"
+    [ "$admin" = "true" ] || { echo "Admin rights on $REPO are required for --apply."; exit 1; }
+  fi
+}
+
+# name|colour|description  (catalogue: BLOOD_CONNECT_PRODUCT_BLUEPRINT.md, Appendix 6)
+LABELS='type:bug|d73a4a|Something is broken
+type:feature|0e8a16|New user-facing capability
+type:improvement|84b6eb|Better version of an existing capability
+type:security|b60205|Security or privacy fix
+type:tech-debt|fbca04|Internal quality, refactor, architecture
+type:docs|0075ca|Documentation
+type:testing|bfd4f2|Tests and test tooling
+type:chore|cfd3d7|Tooling, config, dependencies
+area:auth|1d76db|Sign-up, login, sessions, roles
+area:db|1d76db|Schema, migrations, RLS, SQL functions
+area:donor|1d76db|Donor-facing screens and data
+area:requests|1d76db|Blood requests and their lifecycle
+area:matching|1d76db|Donor/request matching
+area:notifications|1d76db|Email, in-app, WhatsApp links
+area:admin|1d76db|Admin console and moderation
+area:trust|1d76db|Abuse prevention, verification, safety
+area:ui|1d76db|Layout, components, responsiveness, a11y
+area:infra|1d76db|CI, hosting, environments, repo settings
+needs-triage|ededed|New; fields and Definition of Ready not yet checked
+needs-decision|5319e7|Waiting on a team decision
+blocked|000000|Cannot proceed (see Blocked by)
+launch-blocker|b60205|Must be done before public launch
+security-review|e99695|Requires 2 approvals incl. a code owner
+good first issue|7057ff|Small, well-scoped, good for learning
+help wanted|008672|Released or looking for a taker
+interim|f9d0c4|Temporary fix superseded by a later issue
+from-audit|c5def5|Originates from the product audit
+dependencies|0366d6|Dependency updates (Dependabot)'
+
+MILESTONES=(
+  "M0.1 Decisions & repo safety"
+  "M0.2 Honest & safe UI"
+  "M0.3 Supabase foundation"
+  "M0.4 Real identity"
+  "M1.1 Donor flows"
+  "M1.2 Request flows"
+  "M1.3 Response loop & alerts"
+  "M1.4 Beta readiness"
+  "M2.1 Tracking & communication"
+  "M2.2 Trust & admin"
+  "M2.3 Donor experience"
+  "M3.1 Engagement"
+  "M3.2 Community pilot"
+  "M3.3 Scale & quality"
+  "M3.4 Platform review"
+)
+
+step_labels() {
+  echo "== Labels (create missing, update colour/description of existing; never duplicates)"
+  local existing name color desc action
+  existing="$(gh label list --repo "$REPO" --limit 500 --json name --jq '.[].name')"
+  while IFS='|' read -r name color desc; do
+    [ -z "$name" ] && continue
+    if grep -Fxq -- "$name" <<<"$existing"; then action=update; else action=create; fi
+    echo "label ($action): $name"
+    run gh label create "$name" --repo "$REPO" --color "$color" --description "$desc" --force
+  done <<<"$LABELS"
+}
+
+step_milestones() {
+  echo "== Milestones (create missing only)"
+  local existing m
+  existing="$(gh api "repos/$REPO/milestones?state=all&per_page=100" --jq '.[].title')"
+  for m in "${MILESTONES[@]}"; do
+    if grep -Fxq -- "$m" <<<"$existing"; then echo "milestone exists, skipped: $m"; continue; fi
+    run gh api -X POST "repos/$REPO/milestones" -f "title=$m" --silent
+  done
+}
+
+step_repo_settings() {
+  echo "== Merge settings: squash only, PR title as commit title, auto-delete merged branches"
+  run gh api -X PATCH "repos/$REPO" --silent \
+    -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
+    -F delete_branch_on_merge=true -F allow_update_branch=true \
+    -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+}
+
+step_security() {
+  echo "== Security features"
+  run gh api -X PUT "repos/$REPO/vulnerability-alerts" --silent        # Dependabot alerts
+  run gh api -X PUT "repos/$REPO/automated-security-fixes" --silent    # Dependabot security update PRs
+  local vis
+  vis="$(gh api "repos/$REPO" --jq .visibility)"
+  if [ "$vis" = "public" ]; then
+    echo "Repository is public: enabling free private vulnerability reporting, secret scanning and push protection."
+    run gh api -X PUT "repos/$REPO/private-vulnerability-reporting" --silent
+    run_json '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"enabled"}}}' \
+      api -X PATCH "repos/$REPO" --silent
+  else
+    echo "Repository is $vis: GitHub's own secret scanning is a paid feature for private repos; the Gitleaks workflow covers PRs."
+  fi
+}
+
+step_project() {
+  echo "== GitHub Project 'Blood Connect' (no duplicate if it already exists)"
+  local title="Blood Connect" num existing
+  num="$(gh project list --owner "$OWNER" --limit 100 --format json --jq ".projects[] | select(.title==\"$title\") | .number" | head -n1)"
+  if [ -z "$num" ]; then
+    if ! $APPLY; then
+      run gh project create --owner "$OWNER" --title "$title"
+      echo "[dry-run] then add fields Priority, Size, Workstream, Phase, Blocked by, and link the project to $REPO"
+      return
+    fi
+    num="$(gh project create --owner "$OWNER" --title "$title" --format json --jq .number)"
+    echo "created project #$num"
+  else
+    echo "project exists: #$num"
+  fi
+  existing="$(gh project field-list "$num" --owner "$OWNER" --limit 100 --format json --jq '.fields[].name')"
+  add_field() {
+    local name="$1"; shift
+    if grep -Fxq -- "$name" <<<"$existing"; then echo "field exists, skipped: $name"
+    else run gh project field-create "$num" --owner "$OWNER" --name "$name" "$@"; fi
+  }
+  add_field "Priority"   --data-type SINGLE_SELECT --single-select-options "P0,P1,P2,P3"
+  add_field "Size"       --data-type SINGLE_SELECT --single-select-options "XS,S,M,L,XL"
+  add_field "Workstream" --data-type SINGLE_SELECT --single-select-options "A,B,C,D"
+  add_field "Phase"      --data-type SINGLE_SELECT --single-select-options "0,1,2,3"
+  add_field "Blocked by" --data-type TEXT
+  run gh project link "$num" --owner "$OWNER" --repo "$REPO"
+  echo "Manual steps in the web UI (no CLI support): Status options, views and built-in workflows."
+  echo "See docs/DEVOPS.md, section 'GitHub Project'."
+}
+
+step_branch_protection() {
+  echo "== Branch protection for main"
+  local vis checks="" c json
+  vis="$(gh api "repos/$REPO" --jq .visibility)"
+  if [ "$vis" != "public" ]; then
+    echo "NOTE: $REPO is $vis. On a personal account, protecting a private repo needs the OWNER's GitHub Pro"
+    echo "      (free with the GitHub Student Developer Pack). A 403 'Upgrade to GitHub Pro' means it is NOT active."
+  fi
+  for c in $REQUIRED_CHECKS; do checks="${checks:+$checks,}{\"context\":\"$c\"}"; done
+  json="{
+  \"required_status_checks\": {\"strict\": false, \"checks\": [$checks]},
+  \"enforce_admins\": true,
+  \"required_pull_request_reviews\": {
+    \"dismiss_stale_reviews\": true,
+    \"require_code_owner_reviews\": true,
+    \"required_approving_review_count\": 1
+  },
+  \"restrictions\": null,
+  \"required_conversation_resolution\": true,
+  \"allow_force_pushes\": false,
+  \"allow_deletions\": false
+}"
+  run_json "$json" api -X PUT "repos/$REPO/branches/main/protection" --silent
+}
+
+require_gh
+$APPLY && echo "MODE: APPLY (changes will be made to $REPO)" || echo "MODE: DRY RUN (nothing will change). Add --apply to make changes."
+for s in "${STEPS[@]}"; do
+  case "$s" in
+    labels) step_labels ;;
+    milestones) step_milestones ;;
+    repo-settings) step_repo_settings ;;
+    security) step_security ;;
+    project) step_project ;;
+    branch-protection) step_branch_protection ;;
+  esac
+done
