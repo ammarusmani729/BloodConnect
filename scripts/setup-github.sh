@@ -9,13 +9,17 @@
 # Usage:  scripts/setup-github.sh [--apply] <step>...
 # Steps:  labels | milestones | repo-settings | security | project | branch-protection
 #         all  (= labels milestones repo-settings security project; NOT branch-protection)
-# Env:    REPO=owner/name (default below), REQUIRED_CHECKS="ci" (space-separated)
-# Needs:  GitHub CLI logged in as a repo admin (gh auth login);
+# Env:    REPO=owner/name (default below), REQUIRED_CHECKS="ci" (space-separated),
+#         PROJECT_OWNER=<user> (account that owns the Project; default: repo owner)
+# Needs:  GitHub CLI (gh auth login): triage/write for labels+milestones, admin for settings steps;
 #         the project step also needs: gh auth refresh -s project
 set -euo pipefail
 
 REPO="${REPO:-ammarusmani729/BloodConnect}"
 OWNER="${REPO%%/*}"
+# Owner of the GitHub Project (default: repo owner). A collaborator without access to the
+# owner account can host the board on their own account: PROJECT_OWNER=<their-username>.
+PROJECT_OWNER="${PROJECT_OWNER:-$OWNER}"
 REQUIRED_CHECKS="${REQUIRED_CHECKS:-ci}"
 APPLY=false
 STEPS=()
@@ -51,11 +55,15 @@ run_json() {
 require_gh() {
   command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) is not installed: https://cli.github.com/"; exit 1; }
   gh auth status >/dev/null 2>&1 || { echo "Not logged in. Run: gh auth login"; exit 1; }
-  if $APPLY; then
-    local admin
-    admin="$(gh api "repos/$REPO" --jq '.permissions.admin')"
-    [ "$admin" = "true" ] || { echo "Admin rights on $REPO are required for --apply."; exit 1; }
-  fi
+}
+
+# Check the permission a step needs before applying it:
+# labels/milestones need triage (or write); repo settings, security and branch protection need admin.
+require_perm() {
+  $APPLY || return 0
+  local level="$1" ok
+  ok="$(gh api "repos/$REPO" --jq ".permissions.$level")"
+  [ "$ok" = "true" ] || { echo "'$level' permission on $REPO is required for this step (ask the repository owner)."; exit 1; }
 }
 
 # name|colour|description  (catalogue: BLOOD_CONNECT_PRODUCT_BLUEPRINT.md, Appendix 6)
@@ -155,31 +163,43 @@ step_security() {
 step_project() {
   echo "== GitHub Project 'Blood Connect' (no duplicate if it already exists)"
   local title="Blood Connect" num existing
-  num="$(gh project list --owner "$OWNER" --limit 100 --format json --jq ".projects[] | select(.title==\"$title\") | .number" | head -n1)"
+  num="$(gh project list --owner "$PROJECT_OWNER" --limit 100 --format json --jq ".projects[] | select(.title==\"$title\") | .number" | head -n1)"
   if [ -z "$num" ]; then
     if ! $APPLY; then
-      run gh project create --owner "$OWNER" --title "$title"
+      run gh project create --owner "$PROJECT_OWNER" --title "$title"
       echo "[dry-run] then add fields Priority, Size, Workstream, Phase, Blocked by, and link the project to $REPO"
       return
     fi
-    num="$(gh project create --owner "$OWNER" --title "$title" --format json --jq .number)"
+    num="$(gh project create --owner "$PROJECT_OWNER" --title "$title" --format json --jq .number)"
     echo "created project #$num"
   else
     echo "project exists: #$num"
   fi
-  existing="$(gh project field-list "$num" --owner "$OWNER" --limit 100 --format json --jq '.fields[].name')"
+  existing="$(gh project field-list "$num" --owner "$PROJECT_OWNER" --limit 100 --format json --jq '.fields[].name')"
   add_field() {
     local name="$1"; shift
     if grep -Fxq -- "$name" <<<"$existing"; then echo "field exists, skipped: $name"
-    else run gh project field-create "$num" --owner "$OWNER" --name "$name" "$@"; fi
+    else run gh project field-create "$num" --owner "$PROJECT_OWNER" --name "$name" "$@"; fi
   }
   add_field "Priority"   --data-type SINGLE_SELECT --single-select-options "P0,P1,P2,P3"
   add_field "Size"       --data-type SINGLE_SELECT --single-select-options "XS,S,M,L,XL"
   add_field "Workstream" --data-type SINGLE_SELECT --single-select-options "A,B,C,D"
   add_field "Phase"      --data-type SINGLE_SELECT --single-select-options "0,1,2,3"
   add_field "Blocked by" --data-type TEXT
-  run gh project link "$num" --owner "$OWNER" --repo "$REPO"
-  echo "Manual steps in the web UI (no CLI support): Status options, views and built-in workflows."
+  run gh project link "$num" --owner "$PROJECT_OWNER" --repo "$REPO" \
+    || echo "note: project not linked to $REPO (only possible when both have the same owner); issues can still be added."
+  # Replace the default Status options (Todo/In Progress/Done) with the team's seven statuses.
+  local status_id
+  status_id="$(gh project field-list "$num" --owner "$PROJECT_OWNER" --limit 100 --format json --jq '.fields[] | select(.name=="Status") | .id')"
+  run gh api graphql -f "f=$status_id" -f query='mutation($f:ID!){ updateProjectV2Field(input:{fieldId:$f, singleSelectOptions:[
+    {name:"Backlog",color:GRAY,description:"Captured, not yet actionable"},
+    {name:"Ready",color:BLUE,description:"Meets Definition of Ready; free to claim"},
+    {name:"In Progress",color:YELLOW,description:"Assigned and being implemented"},
+    {name:"In Review",color:PURPLE,description:"PR open, waiting for review"},
+    {name:"Changes Requested",color:ORANGE,description:"Review feedback to address"},
+    {name:"Blocked",color:RED,description:"Waiting on a blocker (see Blocked by)"},
+    {name:"Done",color:GREEN,description:"Merged and verified"}]}){ projectV2Field { ... on ProjectV2SingleSelectField { id } } } }' --silent
+  echo "Manual steps in the web UI (no CLI support): views and built-in workflows."
   echo "See docs/DEVOPS.md, section 'GitHub Project'."
 }
 
@@ -212,11 +232,11 @@ require_gh
 $APPLY && echo "MODE: APPLY (changes will be made to $REPO)" || echo "MODE: DRY RUN (nothing will change). Add --apply to make changes."
 for s in "${STEPS[@]}"; do
   case "$s" in
-    labels) step_labels ;;
-    milestones) step_milestones ;;
-    repo-settings) step_repo_settings ;;
-    security) step_security ;;
+    labels) require_perm triage; step_labels ;;
+    milestones) require_perm triage; step_milestones ;;
+    repo-settings) require_perm admin; step_repo_settings ;;
+    security) require_perm admin; step_security ;;
     project) step_project ;;
-    branch-protection) step_branch_protection ;;
+    branch-protection) require_perm admin; step_branch_protection ;;
   esac
 done
